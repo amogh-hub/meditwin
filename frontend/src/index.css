@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+/* ── Raw CSS Variables (Scandinavian color system) ─────── */
+:root {
+  /* Backgrounds */
+  --bg-raw:       #F4F3F0;
+  --card-raw:     #FFFFFF;
+  --card2-raw:    #ECEAE6;
+  /* Borders */
+  --line-raw:     #E0DDD6;
+  --line2-raw:    #C5C1B8;
+  /* Text */
+  --fg-raw:       #1C1B18;
+  --fg2-raw:      #6B6860;
+  --fg3-raw:      #9C9994;
+  /* Accent */
+  --accent-raw:       #1B4DCC;
+  --accent-bg-raw:    rgba(27, 77, 204, 0.08);
+  --accent-bd-raw:    rgba(27, 77, 204, 0.2);
+  /* Risk */
+  --risk-hi-raw:  #DC2626;
+  --risk-md-raw:  #C2850A;
+  --risk-lo-raw:  #15803D;
+  /* Module accent colors */
+  --module-vitals:    #ef4444;
+  --module-sleep:     #8b5cf6;
+  --module-activity:  #22c55e;
+  --module-nutrition: #f59e0b;
+  --module-lifestyle: #3b82f6;
+  --module-labs:      #6366f1;
+  --module-insights:  var(--accent-raw);
+}
+
+.dark {
+  --bg-raw:       #111110;
+  --card-raw:     #1C1C1A;
+  --card2-raw:    #262624;
+  --line-raw:     #2C2C29;
+  --line2-raw:    #3C3C38;
+  --fg-raw:       #F0EDE6;
+  --fg2-raw:      #8A8780;
+  --fg3-raw:      #5A5752;
+  --accent-raw:       #4A82E8;
+  --accent-bg-raw:    rgba(74, 130, 232, 0.1);
+  --accent-bd-raw:    rgba(74, 130, 232, 0.25);
+  --risk-hi-raw:  #EF4444;
+  --risk-md-raw:  #F59E0B;
+  --risk-lo-raw:  #22C55E;
+}
+
+/* ── Tailwind Color Mapping (inline = uses var() reference) */
+@theme inline {
+  --color-bg:           var(--bg-raw);
+  --color-card:         var(--card-raw);
+  --color-card2:        var(--card2-raw);
+  --color-line:         var(--line-raw);
+  --color-line2:        var(--line2-raw);
+  --color-fg:           var(--fg-raw);
+  --color-fg2:          var(--fg2-raw);
+  --color-fg3:          var(--fg3-raw);
+  --color-accent:       var(--accent-raw);
+  --color-risk-hi:      var(--risk-hi-raw);
+  --color-risk-md:      var(--risk-md-raw);
+  --color-risk-lo:      var(--risk-lo-raw);
+  --font-sans:          'Inter', system-ui, sans-serif;
+  --font-grotesk:       'Space Grotesk', 'Inter', system-ui, sans-serif;
+}
+
+/* ── Manual utility classes (CSS-var backed, always theme-aware) */
+@layer utilities {
+  .bg-accent-muted   { background-color: var(--accent-bg-raw); }
+  .border-accent-muted { border-color: var(--accent-bd-raw); }
+  .text-risk-hi      { color: var(--risk-hi-raw); }
+  .text-risk-md      { color: var(--risk-md-raw); }
+  .text-risk-lo      { color: var(--risk-lo-raw); }
+  .bg-risk-hi-muted  { background-color: color-mix(in srgb, var(--risk-hi-raw) 10%, transparent); }
+  .bg-risk-md-muted  { background-color: color-mix(in srgb, var(--risk-md-raw) 10%, transparent); }
+  .bg-risk-lo-muted  { background-color: color-mix(in srgb, var(--risk-lo-raw) 10%, transparent); }
+  .border-risk-hi-muted { border-color: color-mix(in srgb, var(--risk-hi-raw) 25%, transparent); }
+  .border-risk-md-muted { border-color: color-mix(in srgb, var(--risk-md-raw) 25%, transparent); }
+  .border-risk-lo-muted { border-color: color-mix(in srgb, var(--risk-lo-raw) 25%, transparent); }
+}
+
+/* ── Base ─────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg-raw);
+    color: var(--fg-raw);
+    font-family: 'Inter', system-ui, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    line-height: 1.6;
+  }
+
+  ::selection {
+    background-color: var(--accent-raw);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar       { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--line2-raw);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--fg3-raw);
+  }
+
+  /* Focus visible ring - accessible by default */
+  :focus-visible {
+    outline: 2px solid var(--accent-raw);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ── Micro-animations ─────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDownFade {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ringFill {
+  from { stroke-dashoffset: 314; }
+  to   { stroke-dashoffset: var(--ring-offset); }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+@keyframes barGrow {
+  from { transform: scaleY(0); transform-origin: bottom; }
+  to   { transform: scaleY(1); transform-origin: bottom; }
+}
+
+/* ── Animation utility classes ───────────────────────── */
+@layer utilities {
+  .animate-fade-in      { animation: fadeIn 0.35s ease both; }
+  .animate-slide-up     { animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-slide-down   { animation: slideDownFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-scale-in     { animation: scaleIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-count-up     { animation: countUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-pulse-soft   { animation: pulse-soft 2s ease-in-out infinite; }
+
+  /* Stagger delays for child cards */
+  .stagger-1  { animation-delay: 0.05s; }
+  .stagger-2  { animation-delay: 0.10s; }
+  .stagger-3  { animation-delay: 0.15s; }
+  .stagger-4  { animation-delay: 0.20s; }
+  .stagger-5  { animation-delay: 0.25s; }
+  .stagger-6  { animation-delay: 0.30s; }
+  .stagger-7  { animation-delay: 0.35s; }
+  .stagger-8  { animation-delay: 0.40s; }
+
+  /* Shimmer skeleton loader */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--card2-raw) 25%,
+      var(--line-raw) 50%,
+      var(--card2-raw) 75%
+    );
+    background-size: 400px 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+
+  /* Press feedback */
+  .press-feedback {
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  .press-feedback:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
+
+  /* Apple-style hover lift for cards */
+  .card-hover {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.2s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .dark .card-hover:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+}
+
+/* ── Tab content transitions ─────────────────────────── */
+.tab-panel {
+  animation: slideUpFade 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Modal entrance ──────────────────────────────────── */
+.modal-backdrop {
+  animation: fadeIn 0.2s ease both;
+}
+.modal-panel {
+  animation: scaleIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Recharts overrides ──────────────────────────────── */
+.recharts-cartesian-axis-tick text {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.recharts-tooltip-wrapper {
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.12));
+}
+.dark .recharts-tooltip-wrapper {
+  filter: drop-shadow(0 4px 16px rgba(0,0,0,0.4));
+}
+
+/* ── Scrollbar hide utility ──────────────────────────── */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
