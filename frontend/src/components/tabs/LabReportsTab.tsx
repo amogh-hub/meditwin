@@ -157,7 +157,11 @@ export const LabReportsTab: React.FC<{ apiKey: string }> = ({ apiKey }) => {
         body: JSON.stringify({ pdf_base64: base64, file_name: file.name }),
       });
 
-      if (!resp.ok) throw new Error(`Server error: ${resp.statusText}`);
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => null);
+        throw new Error(errorData?.detail || `Server error: ${resp.statusText}`);
+      }
+      
       const data = await resp.json();
 
       if (data.error) throw new Error(data.error);

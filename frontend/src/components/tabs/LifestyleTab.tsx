@@ -243,7 +243,7 @@ export const LifestyleTab: React.FC = () => {
               <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--fg3-raw)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--fg3-raw)' }} tickLine={false} axisLine={false} />
               <Tooltip contentStyle={{ background: 'var(--card-raw)', border: '1px solid var(--line-raw)', borderRadius: 10, fontSize: 12 }}
-                formatter={(v: number) => v !== null ? [`${(v / 1000).toFixed(1)}L`, 'Water'] : ['No data', '']} />
+                formatter={((v: unknown) => v != null ? [`${(Number(v) / 1000).toFixed(1)}L`, 'Water'] : ['No data', '']) as any} />
               <Bar dataKey="water" radius={[6, 6, 0, 0]}>
                 {weekWater.map((d, i) => (
                   <Cell key={i} fill={d.water === null ? 'var(--card2-raw)' : WATER_COLOR(d.water)} fillOpacity={d.water === null ? 0.3 : 0.85} />
@@ -264,7 +264,7 @@ export const LifestyleTab: React.FC = () => {
               <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--fg3-raw)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--fg3-raw)' }} tickLine={false} axisLine={false} />
               <Tooltip contentStyle={{ background: 'var(--card-raw)', border: '1px solid var(--line-raw)', borderRadius: 10, fontSize: 12 }}
-                formatter={(v: number) => v !== null ? [`${Math.floor(v/60)}h ${v%60}m`, 'Screen Time'] : ['No data', '']} />
+                formatter={((v: unknown) => v != null ? [`${Math.floor(Number(v)/60)}h ${Number(v)%60}m`, 'Screen Time'] : ['No data', '']) as any} />
               <Bar dataKey="screen" radius={[6, 6, 0, 0]}>
                 {weekScreen.map((d, i) => (
                   <Cell key={i} fill={

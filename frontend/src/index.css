@@ -165,6 +165,12 @@
   50%       { opacity: 0.6; }
 }
 
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(106, 13, 173, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(106, 13, 173, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(106, 13, 173, 0); }
+}
+
 @keyframes barGrow {
   from { transform: scaleY(0); transform-origin: bottom; }
   to   { transform: scaleY(1); transform-origin: bottom; }
@@ -178,6 +184,7 @@
   .animate-scale-in     { animation: scaleIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
   .animate-count-up     { animation: countUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
   .animate-pulse-soft   { animation: pulse-soft 2s ease-in-out infinite; }
+  .pulse-ring           { animation: pulse-ring 1.5s cubic-bezier(0.24, 0, 0.38, 1) infinite; }
 
   /* Stagger delays for child cards */
   .stagger-1  { animation-delay: 0.05s; }

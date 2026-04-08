@@ -109,6 +109,17 @@ export async function fetchFDAData(drugA: string, drugB: string): Promise<FDADat
   return handleResponse(res);
 }
 
+// ── Voice Input Parsing ──────────────────────────────────────
+
+export async function parseVoiceWithLLM(text: string, currentContext: string, apiKey: string): Promise<any> {
+  const res = await fetch(`${BASE}/voice_parse`, {
+    method: 'POST',
+    headers: authHeaders(apiKey),
+    body: JSON.stringify({ text, current_tab: currentContext }),
+  });
+  return handleResponse(res);
+}
+
 // ── Risk Timeline ─────────────────────────────────────────
 
 export async function fetchRiskTimeline(
@@ -141,14 +152,20 @@ export async function downloadPDF(
     headers: authHeaders(apiKey),
     body: JSON.stringify({ patient, risk, interactions, contraindications, ai_analysis }),
   });
-  if (!res.ok) throw new Error('PDF export failed');
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(text || 'PDF export failed');
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `MediTwin_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 // ── Medication Schedule ───────────────────────────────────

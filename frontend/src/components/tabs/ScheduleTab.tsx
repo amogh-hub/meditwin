@@ -14,11 +14,12 @@ const SLOT_CONFIG: Record<string, {
   bg: string;
   border: string;
   label: string;
+  pillBg: string;
 }> = {
-  'Morning':  { icon: Sunrise, color: '#f59e0b', bg: 'bg-amber-50 dark:bg-amber-950/30',   border: 'border-amber-200 dark:border-amber-800/50',  label: '6 – 9 AM'   },
-  'Noon':     { icon: Sun,     color: '#10b981', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800/50', label: '12 – 2 PM'  },
-  'Evening':  { icon: Sunset,  color: '#6366f1', bg: 'bg-indigo-50 dark:bg-indigo-950/30',  border: 'border-indigo-200 dark:border-indigo-800/50',  label: '5 – 7 PM'   },
-  'Night':    { icon: Moon,    color: '#8b5cf6', bg: 'bg-violet-50 dark:bg-violet-950/30',  border: 'border-violet-200 dark:border-violet-800/50',  label: '9 – 11 PM'  },
+  'Morning':  { icon: Sunrise, color: '#d97706', bg: 'bg-amber-50 dark:bg-amber-950/30',   border: 'border-amber-300 dark:border-amber-700/60',  label: '6 – 9 AM',   pillBg: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200' },
+  'Noon':     { icon: Sun,     color: '#059669', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-300 dark:border-emerald-700/60', label: '12 – 2 PM',  pillBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200' },
+  'Evening':  { icon: Sunset,  color: '#4f46e5', bg: 'bg-indigo-50 dark:bg-indigo-950/30',  border: 'border-indigo-300 dark:border-indigo-700/60',  label: '5 – 7 PM',   pillBg: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200' },
+  'Night':    { icon: Moon,    color: '#7c3aed', bg: 'bg-violet-50 dark:bg-violet-950/30',  border: 'border-violet-300 dark:border-violet-700/60',  label: '9 – 11 PM',  pillBg: 'bg-violet-100 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200' },
 };
 
 function slotKey(time_slot: string): string {
@@ -53,16 +54,18 @@ const SlotCard: React.FC<{ slot: ScheduleSlot }> = ({ slot }) => {
     <div className={`rounded-2xl border p-5 ${cfg.bg} ${cfg.border}`}>
       {/* Slot header */}
       <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-          style={{ backgroundColor: cfg.color + '22' }}>
-          <Icon className="w-4 h-4" style={{ color: cfg.color }} />
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+          style={{ backgroundColor: cfg.color + '30' }}>
+          <Icon className="w-4.5 h-4.5" style={{ color: cfg.color }} />
         </div>
         <div>
-          <div className="text-[13px] font-semibold text-fg">{key}</div>
-          <div className="text-[10.5px] text-fg3">{cfg.label}</div>
+          <div className="text-[14px] font-bold text-fg">{key}</div>
+          <div className="text-[11px] font-semibold text-fg2">{cfg.label}</div>
         </div>
-        <div className="ml-auto text-[11px] text-fg3 font-medium">
-          {slot.medications.length} medication{slot.medications.length !== 1 ? 's' : ''}
+        <div className="ml-auto">
+          <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${cfg.pillBg}`}>
+            {slot.medications.length} med{slot.medications.length !== 1 ? 's' : ''}
+          </span>
         </div>
       </div>
 
@@ -73,13 +76,13 @@ const SlotCard: React.FC<{ slot: ScheduleSlot }> = ({ slot }) => {
             <div className="flex items-start justify-between gap-2 mb-1.5">
               <span className="text-[13px] font-semibold text-fg">{med.name}</span>
               {med.dose_note && (
-                <span className="text-[11px] text-fg3 shrink-0 font-medium">{med.dose_note}</span>
+                <span className="text-[11px] text-fg2 shrink-0 font-medium">{med.dose_note}</span>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <FoodBadge instruction={med.food_instruction} />
               {med.special_note && (
-                <span className="text-[10.5px] text-fg3 italic">{med.special_note}</span>
+                <span className="text-[10.5px] text-fg2 italic">{med.special_note}</span>
               )}
             </div>
           </div>

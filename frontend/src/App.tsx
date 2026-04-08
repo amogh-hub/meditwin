@@ -5,11 +5,12 @@ import {
   ChevronLeft, ChevronRight, CheckCircle2, User, Pill,
   Stethoscope, Sparkles, CalendarDays,
   Heart, BedDouble, Footprints, Apple, Droplets,
-  FileText, LayoutGrid, Settings, ChevronDown,
+  FileText, LayoutGrid, Settings, ChevronDown, Trash2
 } from 'lucide-react';
 import { analyzePatient, fetchMeta, fetchRiskTimeline } from './api';
 import type { Patient, Analysis, TimelinePoint } from './types';
 import { MultiSelect } from './components/MultiSelect';
+import { VoiceAssistant } from './components/VoiceAssistant';
 
 // Health Tracking tabs
 import { ProfileTab }    from './components/tabs/ProfileTab';
@@ -75,7 +76,7 @@ export default function App() {
   const [healthTab, setHealthTab]         = useState<HealthTabId>('profile');
   const [analysisTab, setAnalysisTab]     = useState<AnalysisTabId>('welcome');
   const [apiKey, setApiKey]               = useState('');
-  const [mode, setMode]                   = useState<'Patient' | 'Doctor'>('Patient');
+  const [mode, _setMode]                   = useState<'Patient' | 'Doctor'>('Patient');
   const [isDark, setIsDark]               = useState(true);
   const [meta, setMeta]                   = useState<{ medications: string[]; conditions: string[] }>({
     medications: [], conditions: [],
@@ -89,6 +90,7 @@ export default function App() {
   const [formError, setFormError]         = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen]     = useState(true);
   const [showSettings, setShowSettings]   = useState(false);
+  const [dataVersion, setDataVersion]     = useState(0);
 
   /* Init */
   useEffect(() => {
@@ -107,6 +109,10 @@ export default function App() {
     if (storedSection) setSection(storedSection);
 
     fetchMeta().then(setMeta).catch(console.error);
+
+    const handleDataUpdate = () => setDataVersion(v => v + 1);
+    window.addEventListener('meditwin-data-update', handleDataUpdate);
+    return () => window.removeEventListener('meditwin-data-update', handleDataUpdate);
   }, []);
 
   const toggleTheme = () => {
@@ -180,21 +186,21 @@ export default function App() {
       >
 
         {/* ── Branding bar ── */}
-        <div className={`px-4 py-5 border-b border-line flex items-center shrink-0
+        <div className={`h-[57px] px-4 border-b border-line flex items-center shrink-0
           ${sidebarOpen ? 'justify-between' : 'justify-center'}`}>
 
           {/* Logo */}
-          <div className={`flex items-center gap-3 min-w-0 overflow-hidden transition-all duration-200
+          <div className={`flex items-center gap-3.5 min-w-0 overflow-hidden transition-all duration-200
             ${sidebarOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 pointer-events-none'}`}>
-            <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shrink-0
-              shadow-md shadow-accent/25">
-              <Activity className="w-4.5 h-4.5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0
+              shadow-sm border border-line/50 overflow-hidden">
+              <img src="/meditwin-logo.png" alt="MediTwin" className="w-full h-full object-cover scale-[1.9]" />
             </div>
-            <div className="min-w-0">
-              <div className="text-[15px] font-bold font-grotesk tracking-tight text-fg leading-tight">
+            <div className="min-w-0 flex flex-col justify-center">
+              <div className="text-[18px] font-extrabold font-grotesk tracking-tighter text-fg leading-none">
                 MediTwin
               </div>
-              <div className="text-[9px] uppercase tracking-[0.2em] text-fg3 font-medium mt-0.5">
+              <div className="text-[8.5px] uppercase tracking-[0.25em] text-fg3 font-semibold mt-1">
                 Lite Edition
               </div>
             </div>
@@ -202,8 +208,8 @@ export default function App() {
 
           {/* Collapsed: icon only */}
           {!sidebarOpen && (
-            <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-md shadow-accent/25">
-              <Activity className="w-4 h-4 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm border border-line/50 overflow-hidden">
+              <img src="/meditwin-logo.png" alt="MediTwin" className="w-full h-full object-cover scale-[1.9]" />
             </div>
           )}
 
@@ -456,6 +462,21 @@ export default function App() {
                     : <><span className="opacity-50">Enter key to enable AI analysis</span></>
                   }
                 </div>
+                
+                <div className="pt-2 mt-2 border-t border-line/50">
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to clear all health data? This cannot be undone.')) {
+                        localStorage.clear();
+                        window.location.reload();
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-risk-hi/10 text-risk-hi hover:bg-risk-hi/20 transition-colors text-[11.5px] font-semibold"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Clear All Data
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -546,15 +567,18 @@ export default function App() {
             </div>
           )}
 
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            className="w-9 h-9 flex items-center justify-center rounded-lg border border-line
-              text-fg2 hover:text-fg hover:bg-card2 transition-colors ml-auto"
-            aria-label="Toggle theme"
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
+          {/* Quick Actions (Mic & Theme) */}
+          <div className="flex items-center gap-2 ml-auto">
+            <VoiceAssistant currentTab={section === 'health' ? healthTab : 'none'} />
+            <button
+              onClick={toggleTheme}
+              className="w-9 h-9 flex items-center justify-center rounded-lg border border-line
+                text-fg2 hover:text-fg hover:bg-card2 transition-colors"
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          </div>
         </header>
 
         {/* Tab navigation */}
@@ -590,7 +614,7 @@ export default function App() {
         </div>
 
         {/* Tab content */}
-        <main className="flex-1 p-8 overflow-y-auto h-full">
+        <main key={dataVersion} className="flex-1 p-8 overflow-y-auto h-full">
 
           {/* ── Health Tracking tabs ── */}
           {section === 'health' && healthTab === 'profile'   && <div key="profile"   className="tab-panel"><ProfileTab patient={patient} /></div>}

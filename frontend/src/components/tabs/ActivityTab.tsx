@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Footprints, Dumbbell, Plus, Trash2, Flame, Clock, TrendingUp } from 'lucide-react';
+import { Footprints, Dumbbell, Plus, Trash2, Flame, Clock } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell,
@@ -245,7 +245,7 @@ export const ActivityTab: React.FC = () => {
               <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--fg3-raw)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--fg3-raw)' }} tickLine={false} axisLine={false} />
               <Tooltip contentStyle={{ background: 'var(--card-raw)', border: '1px solid var(--line-raw)', borderRadius: 10, fontSize: 12 }}
-                formatter={(v: number) => v !== null ? [v.toLocaleString(), 'Steps'] : ['No data', '']} />
+                formatter={((v: unknown) => v != null ? [(Number(v)).toLocaleString(), 'Steps'] : ['No data', '']) as any} />
               <Bar dataKey="steps" radius={[6, 6, 0, 0]}>
                 {weekSteps.map((d, i) => (
                   <Cell key={i} fill={d.steps === null ? 'var(--card2-raw)' : STEP_COLORS(d.steps)} fillOpacity={d.steps === null ? 0.3 : 0.85} />

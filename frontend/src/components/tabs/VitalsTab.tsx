@@ -257,7 +257,11 @@ export const VitalsTab: React.FC = () => {
     setSpikes(healthStore.getSpikes(activeMetric));
   }, [activeMetric]);
 
-  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => {
+    reload();
+    window.addEventListener('meditwin-data-update', reload);
+    return () => window.removeEventListener('meditwin-data-update', reload);
+  }, [reload]);
 
   const handleAdd = (r: Omit<VitalReading, 'id'>) => {
     healthStore.addVital(r);

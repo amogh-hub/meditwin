@@ -26,6 +26,7 @@ from ai_engine import (
     gemini_full_analysis,
     gemini_lab_analyze,
     gemini_parse_medications,
+    gemini_parse_voice,
     gemini_safer_regimen,
     gemini_schedule,
     get_gemini_client,
@@ -52,6 +53,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from fastapi.responses import JSONResponse
+import traceback
+import sys
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"Global Exception: {exc}", file=sys.stderr)
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "trace": traceback.format_exc()},
+        headers={"Access-Control-Allow-Origin": request.headers.get("origin", "*")}
+    )
 
 # ── Constants ─────────────────────────────────────────────────────
 
@@ -131,6 +146,9 @@ class ChatPayload(BaseModel):
 class ParseMedsPayload(BaseModel):
     text: str
 
+class VoiceParsePayload(BaseModel):
+    text: str
+    current_tab: str
 
 class PdfPayload(BaseModel):
     patient: dict
@@ -276,6 +294,11 @@ def parse_meds(payload: ParseMedsPayload, request: Request):
     _set_api_key(request)
     return gemini_parse_medications(payload.text, MEDICATIONS)
 
+@app.post("/api/voice_parse")
+def voice_parse(payload: VoiceParsePayload, request: Request):
+    _set_api_key(request)
+    return gemini_parse_voice(payload.text, payload.current_tab)
+
 
 @app.get("/api/fda")
 async def fda_data(
@@ -360,130 +383,266 @@ def risk_timeline(
 
 @app.post("/api/pdf")
 def export_pdf(payload: PdfPayload, request: Request):
-    """Generate and return a PDF medication safety report."""
+    """Generate a premium Apple-style PDF medication safety report."""
     _set_api_key(request)
 
     try:
         from reportlab.lib import colors as rl_colors
-
         from reportlab.lib.pagesizes import letter
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import inch
         from reportlab.platypus import (
-            HRFlowable,
-            Paragraph,
-            SimpleDocTemplate,
-            Spacer,
-            Table,
-            TableStyle,
+            BaseDocTemplate, Frame, PageTemplate,
+            HRFlowable, Paragraph, Spacer, Table, TableStyle, KeepTogether,
         )
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
     except ImportError:
         raise HTTPException(status_code=500, detail="reportlab not installed.")
 
-    styles = getSampleStyleSheet()
-    title_s = ParagraphStyle(
-        "T", parent=styles["Title"], fontSize=22,
-        textColor=rl_colors.HexColor("#1565c0"), spaceAfter=6,
-    )
-    heading_s = ParagraphStyle(
-        "H", parent=styles["Heading2"], fontSize=14,
-        textColor=rl_colors.HexColor("#0d47a1"), spaceBefore=14, spaceAfter=6,
-    )
-    body_s = ParagraphStyle("B", parent=styles["BodyText"], fontSize=10, leading=14, spaceAfter=6)
-    small_s = ParagraphStyle(
-        "S", parent=styles["BodyText"], fontSize=8,
-        textColor=rl_colors.grey, spaceAfter=2,
-    )
+    # ── Design tokens (mirrors Scandinavian palette) ──────────────────
+    C_CARD       = rl_colors.white
+    C_CARD2      = rl_colors.HexColor("#ECEAE6")
+    C_LINE       = rl_colors.HexColor("#E0DDD6")
+    C_FG         = rl_colors.HexColor("#1C1B18")
+    C_FG2        = rl_colors.HexColor("#6B6860")
+    C_FG3        = rl_colors.HexColor("#9C9994")
+    C_ACCENT     = rl_colors.HexColor("#1B4DCC")
+    C_RISK_HI    = rl_colors.HexColor("#DC2626")
+    C_RISK_MD    = rl_colors.HexColor("#C2850A")
+    C_RISK_LO    = rl_colors.HexColor("#15803D")
+    C_RISK_HI_BG = rl_colors.HexColor("#FEE2E2")
+    C_RISK_MD_BG = rl_colors.HexColor("#FEF3C7")
+    C_RISK_LO_BG = rl_colors.HexColor("#DCFCE7")
+
+    W = letter[0] - 1.4 * inch
+
+    def ps(name, font="Helvetica", size=10, color=None, leading=None,
+           align=TA_LEFT, sb=0, sa=4, bold=False):
+        return ParagraphStyle(
+            name, fontName="Helvetica-Bold" if bold else font,
+            fontSize=size, textColor=color or C_FG,
+            leading=leading or size * 1.5,
+            alignment=align, spaceBefore=sb, spaceAfter=sa,
+        )
+
+    s_hero   = ps("hero",  size=22, bold=True, color=rl_colors.white, sa=2)
+    s_hsub   = ps("hsub",  size=10, color=rl_colors.HexColor("#C7D7F8"), sa=0)
+    s_hdate  = ps("hdate", size=8,  color=rl_colors.HexColor("#C7D7F8"), align=TA_RIGHT)
+    s_sec    = ps("sec",   size=8,  bold=True, color=C_FG3, sb=16, sa=8)
+    s_ctitle = ps("ctitle",size=11, bold=True, color=C_FG, sa=3)
+    s_label  = ps("lbl",   size=8,  bold=True, color=C_FG3, sa=1)
+    s_value  = ps("val",   size=10, color=C_FG, sa=4)
+    s_body   = ps("body",  size=9,  color=C_FG2, leading=14, sa=3)
+    s_bhi    = ps("bhi",   size=8,  bold=True, color=C_RISK_HI, align=TA_CENTER)
+    s_bmd    = ps("bmd",   size=8,  bold=True, color=C_RISK_MD, align=TA_CENTER)
+    s_blo    = ps("blo",   size=8,  bold=True, color=C_RISK_LO, align=TA_CENTER)
+    s_disc   = ps("disc",  size=8,  color=C_FG3, leading=12)
+    s_ac_num = ps("acn",   size=9,  bold=True, color=C_ACCENT, align=TA_CENTER)
+    s_hdlbl  = ps("hdlbl", size=8,  bold=True, color=C_FG3, align=TA_CENTER)
+
+    def sec_label(text):
+        return [
+            HRFlowable(width="100%", thickness=0.5, color=C_LINE, spaceBefore=18, spaceAfter=8),
+            Paragraph(f"●  {text.upper()}", s_sec),
+        ]
+
+    def info_table(rows):
+        data = [[Paragraph(k, s_label), Paragraph(v or "—", s_value)] for k, v in rows]
+        t = Table(data, colWidths=[1.4*inch, W - 1.4*inch])
+        t.setStyle(TableStyle([
+            ("ROWBACKGROUNDS", (0,0), (-1,-1), [C_CARD, C_CARD2]),
+            ("TOPPADDING",    (0,0), (-1,-1), 7), ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+            ("LEFTPADDING",   (0,0), (-1,-1), 12),("RIGHTPADDING",  (0,0), (-1,-1), 12),
+            ("LINEBELOW",     (0,0), (-1,-2), 0.4, C_LINE),
+            ("BOX",           (0,0), (-1,-1), 0.6, C_LINE),
+            ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ]))
+        return t
+
+    def risk_badge(level, score):
+        cm = {"High": C_RISK_HI, "Medium": C_RISK_MD, "Low": C_RISK_LO}
+        bm = {"High": C_RISK_HI_BG, "Medium": C_RISK_MD_BG, "Low": C_RISK_LO_BG}
+        sm = {"High": s_bhi, "Medium": s_bmd, "Low": s_blo}
+        rc, rbg, rs = cm.get(level, C_FG3), bm.get(level, C_CARD2), sm.get(level, s_body)
+        t = Table([[Paragraph(f"{level.upper()}  ·  Score: {score}", rs)]], colWidths=[1.7*inch])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0),(-1,-1), rbg), ("BOX", (0,0),(-1,-1), 0.8, rc),
+            ("TOPPADDING",    (0,0),(-1,-1), 5), ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ("LEFTPADDING",   (0,0),(-1,-1), 10),("RIGHTPADDING",  (0,0),(-1,-1), 10),
+        ]))
+        return t
+
+    def banner():
+        t = Table(
+            [[Paragraph("MediTwin Lite", s_hero),
+              Paragraph(datetime.now().strftime("%b %d, %Y  ·  %I:%M %p"), s_hdate)],
+             [Paragraph("Medication Safety Report", s_hsub), ""]],
+            colWidths=[W * 0.65, W * 0.35],
+        )
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0),(-1,-1), C_ACCENT),
+            ("TOPPADDING",    (0,0),(-1,-1), 18), ("BOTTOMPADDING", (0,0),(-1,-1), 18),
+            ("LEFTPADDING",   (0,0),(-1,-1), 20), ("RIGHTPADDING",  (0,0),(-1,-1), 16),
+            ("VALIGN",        (0,0),(-1,-1), "MIDDLE"), ("SPAN", (1,0),(1,1)),
+        ]))
+        return t
+
+    def ix_card(ix):
+        sev = ix.get("severity","moderate").lower()
+        sc  = {"severe": C_RISK_HI, "moderate": C_RISK_MD, "low": C_RISK_LO}.get(sev, C_FG3)
+        sbg = {"severe": C_RISK_HI_BG, "moderate": C_RISK_MD_BG, "low": C_RISK_LO_BG}.get(sev, C_CARD2)
+        ss  = {"severe": s_bhi, "moderate": s_bmd, "low": s_blo}.get(sev, s_body)
+
+        badge = Table([[Paragraph(sev.upper(), ss)]], colWidths=[0.75*inch])
+        badge.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), sbg), ("BOX",(0,0),(-1,-1), 0.6, sc),
+            ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
+            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+        ]))
+
+        head = Table([[
+            Paragraph(f"<b>{ix.get('drug_a','')} ↔ {ix.get('drug_b','')}</b>", s_ctitle),
+            badge
+        ]], colWidths=[W - 0.4*inch - 0.9*inch, 0.9*inch])
+        head.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,-1),C_CARD),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),6),
+            ("LEFTPADDING",(0,0),(-1,-1),12),("RIGHTPADDING",(0,0),(-1,-1),12),
+            ("LINEBELOW",(0,0),(-1,-1),0.4,C_LINE),
+        ]))
+
+        body_rows = [head]
+        for lbl, val in [("Description", ix.get("description","")),
+                         ("Mechanism",   ix.get("mechanism","")),
+                         ("Alternative", ix.get("alternative","")),
+                         ("Monitoring",  ix.get("monitoring",""))]:
+            if val:
+                r = Table([[Paragraph(lbl.upper(), s_label), Paragraph(val, s_body)]],
+                          colWidths=[0.95*inch, W - 0.4*inch - 1.1*inch])
+                r.setStyle(TableStyle([
+                    ("BACKGROUND",(0,0),(-1,-1),C_CARD),
+                    ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+                    ("LEFTPADDING",(0,0),(-1,-1),12),("RIGHTPADDING",(0,0),(-1,-1),12),
+                ]))
+                body_rows.append(r)
+
+        outer = Table([[body_rows]], colWidths=[W])
+        outer.setStyle(TableStyle([
+            ("BOX",(0,0),(-1,-1),0.6,C_LINE),("BACKGROUND",(0,0),(-1,-1),C_CARD),
+            ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0),
+            ("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),
+        ]))
+        return KeepTogether([outer, Spacer(1, 8)])
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=letter,
-        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
-        leftMargin=0.75 * inch, rightMargin=0.75 * inch,
-    )
 
-    p = payload.patient
-    story = [
-        Paragraph("MediTwin Lite — Medication Safety Report", title_s),
-        Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", small_s),
-        HRFlowable(width="100%", thickness=1, color=rl_colors.HexColor("#1565c0")),
-        Spacer(1, 12),
-        Paragraph("Patient Profile", heading_s),
-    ]
+    def on_page(canvas, doc):
+        canvas.saveState()
+        canvas.setStrokeColor(C_LINE)
+        canvas.setLineWidth(0.4)
+        canvas.line(0.7*inch, 0.55*inch, letter[0]-0.7*inch, 0.55*inch)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(C_FG3)
+        canvas.drawString(0.7*inch, 0.38*inch,
+            "MediTwin Lite  ·  Informational use only. Not a substitute for professional medical advice.")
+        canvas.drawRightString(letter[0]-0.7*inch, 0.38*inch, f"Page {doc.page}")
+        canvas.restoreState()
 
-    info = Table(
-        [
-            ["Age", str(p.get("age", ""))],
-            ["Gender", p.get("gender", "")],
-            ["Conditions", ", ".join(p.get("conditions", [])) or "None"],
-            ["Medications", ", ".join(p.get("medications", []))],
-        ],
-        colWidths=[1.5 * inch, 5 * inch],
-    )
-    info.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, -1), rl_colors.HexColor("#e3f2fd")),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#bbdefb")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    doc = BaseDocTemplate(buf, pagesize=letter,
+        topMargin=0.65*inch, bottomMargin=0.82*inch,
+        leftMargin=0.7*inch, rightMargin=0.7*inch)
+    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="main")
+    doc.addPageTemplates([PageTemplate(id="main", frames=frame, onPage=on_page)])
+
+    p     = payload.patient
+    risk  = payload.risk
+    level = risk.get("level", "Low")
+
+    story = [banner(), Spacer(1, 14)]
+
+    story += sec_label("Patient Profile")
+    story.append(info_table([
+        ("Age",         str(p.get("age",""))),
+        ("Sex",         p.get("gender","")),
+        ("Conditions",  ", ".join(p.get("conditions",[])) or "None reported"),
+        ("Medications", ", ".join(p.get("medications",[])) or "None"),
     ]))
-    story += [info, Spacer(1, 12)]
 
-    risk = payload.risk
-    rc = {"Low": "#4caf50", "Medium": "#ff9800", "High": "#f44336"}.get(risk.get("level", ""), "#999")
-    story.append(Paragraph("Risk Assessment", heading_s))
-    story.append(Paragraph(
-        f'Overall Risk Score: <b><font color="{rc}">{risk.get("total")} — {risk.get("level")}</font></b>',
-        body_s,
-    ))
-    for f in risk.get("factors", []):
-        story.append(Paragraph(f"• {f['factor']}: +{f['points']} points", body_s))
-    story.append(Spacer(1, 8))
+    story += sec_label("Risk Assessment")
+    story.append(risk_badge(level, risk.get("total", 0)))
+    story.append(Spacer(1, 10))
+
+    factors = risk.get("factors", [])
+    if factors:
+        frows = [[Paragraph("<b>Risk Factor</b>", s_label),
+                  Paragraph("<b>Pts</b>", s_hdlbl)]]
+        for f in factors:
+            frows.append([Paragraph(f["factor"], s_body),
+                          Paragraph(f"+{f['points']}", s_ac_num)])
+        ft = Table(frows, colWidths=[W - 0.75*inch, 0.75*inch])
+        ft.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0),(-1,0), C_CARD2),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1), [C_CARD, C_CARD2]),
+            ("TOPPADDING",    (0,0),(-1,-1), 6), ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+            ("LEFTPADDING",   (0,0),(-1,-1), 12),("RIGHTPADDING",  (0,0),(-1,-1), 12),
+            ("LINEBELOW",     (0,0),(-1,-2), 0.4, C_LINE),
+            ("BOX",           (0,0),(-1,-1), 0.6, C_LINE),
+            ("ALIGN",         (1,0),(1,-1), "CENTER"),
+            ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+        ]))
+        story.append(ft)
 
     if payload.contraindications:
-        story.append(Paragraph("Drug-Condition Contraindications", heading_s))
+        story += sec_label("Drug–Condition Contraindications")
         for ci in payload.contraindications:
-            story.append(Paragraph(
-                f'<b>{ci["drug"]}</b> — {ci["condition"]} [{ci["severity"].upper().replace("_", " ")}]',
-                body_s,
-            ))
-            story.append(Paragraph(ci["description"], body_s))
-            story.append(Paragraph(f'Alternative: {ci["alternative"]}', body_s))
-            story.append(Spacer(1, 4))
-
-    if payload.interactions:
-        story.append(Paragraph("Flagged Drug Interactions", heading_s))
-        for ix in payload.interactions:
-            story.append(Paragraph(
-                f'<b>{ix["drug_a"]} ↔ {ix["drug_b"]}</b>  [{ix["severity"].upper()}]', body_s,
-            ))
-            story.append(Paragraph(f'<i>{ix["description"]}</i>', body_s))
-            story.append(Paragraph(f'Mechanism: {ix["mechanism"]}', body_s))
-            story.append(Paragraph(f'Alternative: {ix["alternative"]}', body_s))
-            story.append(Paragraph(f'Monitoring: {ix["monitoring"]}', body_s))
+            sev_txt = ci.get("severity","").replace("_"," ").upper()
+            rt = Table([[
+                Paragraph(f"<b>{ci.get('drug','')}</b>", s_ctitle),
+                Paragraph(ci.get("condition",""), s_body),
+                Paragraph(sev_txt, s_bhi),
+            ]], colWidths=[1.4*inch, W - 2.4*inch, 1.0*inch])
+            rt.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,-1),C_CARD),("BOX",(0,0),(-1,-1),0.6,C_LINE),
+                ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
+                ("LEFTPADDING",(0,0),(-1,-1),12),("RIGHTPADDING",(0,0),(-1,-1),12),
+                ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ]))
+            story.append(rt)
+            if ci.get("description"):
+                story.append(Paragraph(ci["description"], s_body))
+            if ci.get("alternative"):
+                story.append(Paragraph(f"Alternative: {ci['alternative']}", s_body))
             story.append(Spacer(1, 6))
 
+    if payload.interactions:
+        story += sec_label("Flagged Drug Interactions")
+        for ix in payload.interactions:
+            story.append(ix_card(ix))
+
     if payload.ai_analysis:
-        story.append(Paragraph("AI-Powered Analysis", heading_s))
+        story += sec_label("AI Clinical Analysis")
+        story.append(HRFlowable(width="100%", thickness=1, color=C_LINE, spaceAfter=8, spaceBefore=4))
         for line in payload.ai_analysis.split("\n"):
             line = line.strip()
             if not line:
                 story.append(Spacer(1, 4))
-            elif line.startswith("##"):
-                story.append(Paragraph(line.lstrip("#").strip(), heading_s))
+            elif line.startswith("#"):
+                story.append(Paragraph(line.lstrip("#").strip(), s_ctitle))
             else:
-                story.append(Paragraph(line.replace("**", "").replace("*", ""), body_s))
+                clean = line.replace("**","").replace("*","").replace("__","")
+                story.append(Paragraph(clean, s_body))
+        story.append(Spacer(1, 8))
+        story.append(HRFlowable(width="100%", thickness=1, color=C_LINE, spaceAfter=8))
 
     story += [
         Spacer(1, 20),
-        HRFlowable(width="100%", thickness=0.5, color=rl_colors.grey),
+        HRFlowable(width="100%", thickness=0.4, color=C_LINE),
+        Spacer(1, 6),
         Paragraph(
-            "<b>Disclaimer:</b> This report is for informational purposes only and does not "
-            "constitute medical advice. Always consult your healthcare provider before making "
-            "any changes to your medication regimen.",
-            small_s,
+            "<b>Medical Disclaimer:</b> This report is generated for informational purposes only "
+            "and does not constitute medical advice, diagnosis, or treatment. Always consult a "
+            "qualified healthcare professional before making any changes to your medication regimen.",
+            s_disc,
         ),
     ]
 
@@ -494,15 +653,19 @@ def export_pdf(payload: PdfPayload, request: Request):
         headers={"Content-Disposition": "attachment; filename=MediTwin_Report.pdf"},
     )
 
-
 @app.post("/api/lab_analyze")
 def lab_analyze(payload: LabAnalyzePayload, request: Request):
     """Parse a base64-encoded lab report PDF with Gemini and return structured values."""
+    # Ensure any DataURL prefix from browser FileReader is stripped
+    raw_b64 = payload.pdf_base64
+    if "," in raw_b64:
+        raw_b64 = raw_b64.split(",", 1)[1]
+
     _set_api_key(request)
     if not get_gemini_client():
         raise HTTPException(status_code=400, detail="Google API Key required to analyze lab reports.")
 
-    result = gemini_lab_analyze(payload.pdf_base64, payload.file_name)
+    result = gemini_lab_analyze(raw_b64, payload.file_name)
 
     if "error" in result and not result.get("values"):
         raise HTTPException(status_code=502, detail=result["error"])

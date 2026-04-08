@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Moon, Plus, Trash2, Star, AlertCircle, Clock } from 'lucide-react';
+import { Moon, Plus, Trash2 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine, Cell,
@@ -235,7 +235,7 @@ export const SleepTab: React.FC = () => {
               <ReferenceLine y={7}  stroke="#22c55e" strokeDasharray="4 4" strokeOpacity={0.7} label={{ value: 'Min 7h', fontSize: 9, fill: '#22c55e' }} />
               <ReferenceLine y={9}  stroke="#22c55e" strokeDasharray="4 4" strokeOpacity={0.5} label={{ value: 'Max 9h', fontSize: 9, fill: '#22c55e' }} />
               <Tooltip contentStyle={{ background: 'var(--card-raw)', border: '1px solid var(--line-raw)', borderRadius: 10, fontSize: 12 }}
-                formatter={(v: number) => v !== null ? [`${v}h`, 'Duration'] : ['No data', '']} />
+                formatter={((v: unknown) => v != null ? [`${Number(v)}h`, 'Duration'] : ['No data', '']) as any} />
               <Bar dataKey="duration" radius={[6, 6, 0, 0]}>
                 {last7.map((d, i) => (
                   <Cell key={i} fill={

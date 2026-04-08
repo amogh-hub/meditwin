@@ -226,6 +226,36 @@ User input: "{text}"
         return {"success": False, "error": str(e), "medications": []}
 
 
+def gemini_parse_voice(text: str, current_tab: str) -> dict:
+    """Parse unstructured voice transcripts into structured health data events using Gemini."""
+    client = get_gemini_client()
+    if client is None:
+        return {"error": "Google API key not configured.", "success": False}
+
+    prompt = f"""You are a medical data extraction engine. The user told you the following via voice while looking at the '{current_tab}' tab of their health app.
+
+Extract EVERY piece of health, demographic, and lifestyle data explicitly stated into a structured JSON array. Each element in the array must be an object representing one intent.
+
+Supported Categories and exact formats required (choose best match, guess reasonably based on context if incomplete):
+1. `profile`: {{"category": "profile",  "data": {{"name": "...", "age": 25, "gender": "Male|Female", "weightKg": 70, "heightCm": 180, "bloodType": "..."}}}}
+2. `vitals`: {{"category": "vitals", "data": {{"metric": "bloodPressure"|"heartRate"|"glucose"|"spo2"|"temperature", "value": 120, "systolicVal": 120, "diastolicVal": 80}}}}
+3. `sleep`: {{"category": "sleep", "data": {{"duration": 480}}}} (duration in minutes)
+4. `activity`: {{"category": "activity", "data": {{"type": "steps"|"workout", "steps": 5000, "workoutType": "cardio"|"yoga"|"strength"|"walking"|"other", "duration": 30}}}} (duration in mins)
+5. `nutrition`: {{"category": "nutrition", "data": {{"meal": "breakfast"|"lunch"|"dinner"|"snack", "calories": 500}}}}
+6. `lifestyle`: {{"category": "lifestyle", "data": {{"type": "water"|"screenTime", "amount": 2000}}}} (water in ml, screenTime in mins)
+
+Return ONLY a valid JSON array of these objects. No markdown formatting, backticks, or extra text.
+
+Transcript: "{text}"
+"""
+    try:
+        response = gemini_generate(client, prompt, system="Return ONLY a JSON array without markdown block wrappers.")
+        cleaned = re.sub(r"^```[a-z]*\s*|\s*```$", "", response.strip(), flags=re.MULTILINE|re.IGNORECASE)
+        result = json.loads(cleaned)
+        return {"success": True, "parsed": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def gemini_safer_regimen(
     patient: dict,
     interactions: List[dict],
@@ -387,7 +417,7 @@ Analyze this lab report PDF and return a JSON object with EXACTLY this structure
       "unit": "Unit (e.g. mg/dL)",
       "range": "Reference range as string (e.g. <130 mg/dL)",
       "status": "normal" | "low" | "high" | "critical",
-      "context": "One sentence of clinical context if abnormal, or empty string if normal"
+      "context": "Keep extremely brief (1 sentence, max 12 words) if abnormal, or empty string if normal"
     }
   ],
   "actions": [
@@ -396,7 +426,8 @@ Analyze this lab report PDF and return a JSON object with EXACTLY this structure
 }
 
 Rules:
-- Extract ALL measurable values from the report (CBC, lipids, metabolic panel, thyroid, renal, liver, HbA1c, vitamins, etc.)
+- Extract a maximum of 12 most clinically significant values from the report.
+- PRIORITIZE abnormal, out-of-range, or critical markers first. Do not extract normal markers if the report is large.
 - Mark status as 'critical' only if dangerously outside range requiring immediate attention
 - urgency: 'monitor' = all normal or minor deviations, 'consult_soon' = multiple abnormals or moderate deviations, 'urgent' = critical values
 - actions must be concrete and personalized to the actual values found (not generic)
@@ -415,6 +446,25 @@ Rules:
             config=genai_types.GenerateContentConfig(
                 max_output_tokens=8192,
                 temperature=0.2,
+                response_mime_type="application/json",
+                safety_settings=[
+                    genai_types.SafetySetting(
+                        category=genai_types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=genai_types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    genai_types.SafetySetting(
+                        category=genai_types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=genai_types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    genai_types.SafetySetting(
+                        category=genai_types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=genai_types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    genai_types.SafetySetting(
+                        category=genai_types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=genai_types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ]
             ),
         )
         raw = response.text.strip()
@@ -422,8 +472,35 @@ Rules:
         if raw.startswith("```"):
             raw = re.sub(r"^```[a-z]*\n?", "", raw)
             raw = re.sub(r"\n?```$", "", raw)
-        return json.loads(raw)
-    except json.JSONDecodeError:
+            
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as e:
+            # Fallback: Attempt to repair truncated JSON
+            last_brace = raw.rfind("}")
+            if last_brace != -1:
+                repaired = raw[:last_brace+1]
+                if '"values":' in repaired and '"actions":' not in repaired:
+                    repaired += '\n  ],\n  "actions": ["Note: Full analysis truncated due to report length."]\n}'
+                elif '"actions":' in repaired:
+                    repaired += '\n  ]\n}'
+                else:
+                    repaired += '\n}'
+                try:
+                    repaired_json = json.loads(repaired)
+                    import sys
+                    print("Successfully repaired truncated JSON response.", file=sys.stderr)
+                    return repaired_json
+                except Exception:
+                    pass
+            raise e
+            
+    except json.JSONDecodeError as e:
+        import sys
+        reason = "UNKNOWN"
+        if 'response' in locals() and hasattr(response, 'candidates') and response.candidates:
+            reason = response.candidates[0].finish_reason
+        print(f"JSON Parse Error. Finish Reason: {reason}. Raw response was:\n{raw}", file=sys.stderr)
         return {"error": "Could not parse AI response. Please try again.", "summary": "", "values": [], "actions": [], "urgency": "monitor"}
     except Exception as e:
         return {"error": str(e), "summary": "", "values": [], "actions": [], "urgency": "monitor"}
